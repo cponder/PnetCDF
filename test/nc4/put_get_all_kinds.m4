@@ -91,6 +91,9 @@ blocking_put_$1(int         rank,
     err = ncmpi_put_vara_double_all(ncid, vara_id, start, count, buf); CHECK_ERR
     err = ncmpi_get_vara_double_all(ncid, vara_id, start, count, rbuf); CHECK_ERR
 
+    err = ncmpi_put_varn_double_all(ncid, vara_id, rank & 1, &start, &count, buf); CHECK_ERR
+    err = ncmpi_get_varn_double_all(ncid, vara_id, rank & 1, &start, &count, rbuf); CHECK_ERR
+
     err = ncmpi_put_vars_double_all(ncid, vars_id, startS, countS, stride, buf);
     CHECK_ERR
     err = ncmpi_get_vars_double_all(ncid, vars_id, startS, countS, stride, rbuf);

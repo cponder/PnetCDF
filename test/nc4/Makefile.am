@@ -38,7 +38,8 @@ TESTPROGRAMS = simple_xy \
                tst_2_rec_dims \
                tst_get_put_size \
                pres_temp_4D \
-               rd_compressed
+               rd_compressed \
+               test
 
 M4_SRCS  = put_get_all_kinds.m4 interoperability_rd.m4 interoperability_wr.m4
 

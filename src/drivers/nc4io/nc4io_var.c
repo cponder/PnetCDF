@@ -226,7 +226,56 @@ nc4io_get_varn(void              *ncdp,
                MPI_Datatype       buftype,
                int                reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int i, j;
+    int num_all;
+    int ndim;
+    int esize;
+    MPI_Offset putsize;
+    MPI_Offset *start = NULL, *count = NULL;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    // ndim
+    err = nc_inq_var(nc4p->ncid, varid, NULL, NULL, &ndim, NULL, NULL);
+    if (err != NC_NOERR) DEBUG_RETURN_ERROR(err);
+
+    // element size
+    MPI_Type_size(buftype, &esize);
+
+    // sync num
+    MPI_Allreduce(&num, &num_all, 1, MPI_INT, MPI_MAX, nc4p->comm);
+
+    // We need dummy call
+    if (num < num_all){
+        start = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset) * ndim * 2);
+        count = start + ndim;
+        memset(start, 0, sizeof(MPI_Offset) * ndim * 2);
+    }
+
+    // convert to n vara call
+    for(i = 0; i < num_all; i++){
+        if (i < num){
+            err |= nc4io_get_var(ncdp, varid, starts[i], counts[i], NULL, NULL, buf, bufcount, buftype, reqMode);
+            // move buf ptr
+            putsize = esize;
+            for(j = 0; j < ndim; j++){
+                putsize *= counts[i][j];
+            }
+            buf = (void*)(((char*)buf) + putsize);
+        }
+        else{
+            // Dummy call
+            err |= nc4io_get_var(ncdp, varid, start, count, NULL, NULL, buf, bufcount, buftype, reqMode);
+        }
+    }
+    if (err != NC_NOERR) return err;
+
+    // Free buffer
+    if (num < num_all){
+        NCI_Free(start);
+    }
+
+    return NC_NOERR;
 }
 
 int
@@ -240,7 +289,56 @@ nc4io_put_varn(void              *ncdp,
                MPI_Datatype       buftype,
                int                reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int i, j;
+    int num_all;
+    int ndim;
+    int esize;
+    MPI_Offset putsize;
+    MPI_Offset *start = NULL, *count = NULL;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    // ndim
+    err = nc_inq_var(nc4p->ncid, varid, NULL, NULL, &ndim, NULL, NULL);
+    if (err != NC_NOERR) DEBUG_RETURN_ERROR(err);
+
+    // element size
+    MPI_Type_size(buftype, &esize);
+
+    // sync num
+    MPI_Allreduce(&num, &num_all, 1, MPI_INT, MPI_MAX, nc4p->comm);
+
+    // We need dummy call
+    if (num < num_all){
+        start = (MPI_Offset*)NCI_Malloc(sizeof(MPI_Offset) * ndim * 2);
+        count = start + ndim;
+        memset(start, 0, sizeof(MPI_Offset) * ndim * 2);
+    }
+
+    // convert to n vara call
+    for(i = 0; i < num_all; i++){
+        if (i < num){
+            err |= nc4io_put_var(ncdp, varid, starts[i], counts[i], NULL, NULL, buf, bufcount, buftype, reqMode);
+            // move buf ptr
+            putsize = esize;
+            for(j = 0; j < ndim; j++){
+                putsize *= counts[i][j];
+            }
+            buf = (void*)(((char*)buf) + putsize);
+        }
+        else{
+            // Dummy call
+            err |= nc4io_put_var(ncdp, varid, start, count, NULL, NULL, buf, bufcount, buftype, reqMode);
+        }
+    }
+    if (err != NC_NOERR) return err;
+
+    // Free buffer
+    if (num < num_all){
+        NCI_Free(start);
+    }
+
+    return NC_NOERR;
 }
 
 int
