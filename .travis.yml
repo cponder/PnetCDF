@@ -68,3 +68,4 @@ notifications:
 branches:
     only:
         - master
+        - test_travis_ci
