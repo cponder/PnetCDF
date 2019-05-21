@@ -12,7 +12,9 @@ This is essentially a placeholder for the next release note ...
   + none
 
 * Update configure options
-  + none
+  + Option `--with-netcdf4` now allows a form of `--with-netcdf4=INC,LIB` in
+    addition to `--with-netcdf4=DIR`. This is in case the include and lib
+    folders of NetCDF-4 installation are in different locations.
 
 * New constants
   + none
@@ -51,11 +53,9 @@ This is essentially a placeholder for the next release note ...
   + none
 
 * Bug fixes
-  + When `--enable-netcdf4` is used at configure time, users may encounter
-    problem during configure or make time, if the NetCDF4 library was built
-    with static libraries only. Thanks Bruno Pagani for reporting. This has
-    been fixed in
-    [pull request #46](https://github.com/Parallel-NetCDF/PnetCDF/pull/46).
+  + When calling a nonblocking API with a zero-length request and argument
+    request ID being NULL, segmentation fault may occur. See
+    [PR #51](https://github.com/Parallel-NetCDF/PnetCDF/pull/51)
 
 * New example programs
   + none
@@ -64,12 +64,7 @@ This is essentially a placeholder for the next release note ...
   + none
 
 * New test program
-  + test/nc4/notsupport - Test if error code NC_ENOTSUPPORT is properly
-    returned when calling APIs for unsupported NetCDF-4 feature.
-  + test/nc4/rec - Test creating and reading a NetCDF-4 file with 1 unlimited
-    dimension. 
-  + test/nc4/rec2 - Test opening a NetCDF-4 file with more than 1 unlimited
-    dimensions.
+  + none
 
 * Conformity with NetCDF library
   + none
