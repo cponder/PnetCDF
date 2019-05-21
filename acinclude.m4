@@ -1711,50 +1711,50 @@ AC_DEFUN([UD_CHECK_MPICC_BASE],[
    ac_cv_mpicc_base=
    # Check GCC
    ac_MPICC_VER="$($MPICC --version 2>&1)"
+   UD_MSG_DEBUG(GCC ac_MPICC_VER=$ac_MPICC_VER)
    ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w gcc`
-   # AC_MSG_NOTICE(GCC ac_MPICC_VER=$ac_MPICC_VER)
    if test "x${ac_MPICC_VER}" != x ; then
       ac_cv_mpicc_base="GCC"
    else
       # Check CLANG
       ac_MPICC_VER="$($MPICC --version 2>&1)"
+      UD_MSG_DEBUG(clang ac_MPICC_VER=$ac_MPICC_VER)
       ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w clang`
-      # AC_MSG_NOTICE(clang ac_MPICC_VER=$ac_MPICC_VER)
       if test "x${ac_MPICC_VER}" != x ; then
          ac_cv_mpicc_base="CLANG"
       else
          # Check Intel C
          ac_MPICC_VER="$($MPICC --version 2>&1)"
+         UD_MSG_DEBUG(icc ac_MPICC_VER=$ac_MPICC_VER)
          ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w icc`
-         # AC_MSG_NOTICE(icc ac_MPICC_VER=$ac_MPICC_VER)
          if test "x${ac_MPICC_VER}" != x ; then
             ac_cv_mpicc_base="ICC"
          else
             # Check XLC
             ac_MPICC_VER="$($MPICC -qversion 2>&1)"
+            UD_MSG_DEBUG(XLC ac_MPICC_VER=$ac_MPICC_VER)
             ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} "IBM XL C"`
-            # AC_MSG_NOTICE(XLC ac_MPICC_VER=$ac_MPICC_VER)
             if test "x${ac_MPICC_VER}" != x ; then
                ac_cv_mpicc_base="XLC"
             else
                # Check PGCC
                ac_MPICC_VER="$($MPICC -V -c 2>&1)"
+               UD_MSG_DEBUG(pgcc ac_MPICC_VER=$ac_MPICC_VER)
                ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w pgcc`
-               # AC_MSG_NOTICE(pgcc ac_MPICC_VER=$ac_MPICC_VER)
                if test "x${ac_MPICC_VER}" != x ; then
                   ac_cv_mpicc_base="PGCC"
                else
                   # Check SOLARIS
                   ac_MPICC_VER="$($MPICC -V 2>&1)"
+                  UD_MSG_DEBUG(Sun ac_MPICC_VER=$ac_MPICC_VER)
                   ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w Sun`
-                  # AC_MSG_NOTICE(Sun ac_MPICC_VER=$ac_MPICC_VER)
                   if test "x${ac_MPICC_VER}" != x ; then
                      ac_cv_mpicc_base="SOLARIS"
                   else
                      # Check FCCPX
                      ac_MPICC_VER="$($MPICC --showme 2>&1)"
+                     UD_MSG_DEBUG(fccpx ac_MPICC_VER=$ac_MPICC_VER)
                      ac_MPICC_VER=`echo $ac_MPICC_VER | ${GREP} -w fccpx`
-                     # AC_MSG_NOTICE(fccpx ac_MPICC_VER=$ac_MPICC_VER)
                      if test "x${ac_MPICC_VER}" != x ; then
                         ac_cv_mpicc_base="FCCPX"
                      fi
