@@ -33,7 +33,10 @@ C_SRCS = nc4io_attr.c \
          nc4io_dim.c \
          nc4io_driver.c \
          nc4io_file.c \
-         nc4io_var.c
+         nc4io_var.c \
+         nc4io_nonblocking.c \
+         nc4io_req.c \
+         nc4io_wait.c
 
 $(M4_SRCS:.m4=.c): Makefile
 

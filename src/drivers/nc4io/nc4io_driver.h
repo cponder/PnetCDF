@@ -17,6 +17,31 @@
 #define NC4_API_KIND_VARS 4
 #define NC4_API_KIND_VARM 5
 
+/* Get_req structure */
+typedef struct NC_nc4_req {
+    int varid;
+    int nreq;
+    MPI_Offset *start;
+    MPI_Offset **starts;
+    MPI_Offset *count;
+    MPI_Offset **counts;
+    MPI_Offset *stride;
+    MPI_Offset *imap;
+    MPI_Datatype buftype;
+    char *buf;
+    char **bufs;
+    int deepcp;
+} NC_nc4_req;
+
+/* Get_req list structure */
+typedef struct NC_nc4_req_list {
+    NC_nc4_req *reqs;    // Array of request object
+    int *ids;   // Array of request ids
+    int *pos;   // Array of position of request ids in ids
+    int nalloc; // Size of the pool
+    int nused;  // Number of ids issued
+} NC_nc4_req_list;
+
 typedef struct NC_nc4 NC_nc4; /* forward reference */
 struct NC_nc4 {
     int         mode;    /* file _open/_create mode */
@@ -25,6 +50,9 @@ struct NC_nc4 {
     MPI_Comm    comm;    /* MPI communicator */
     MPI_Info    mpiinfo; /* MPI hints */
     int         ncid;    /* NetCDF file ID */
+    int         maxndim;
+    NC_nc4_req_list     putlist;
+    NC_nc4_req_list     getlist;
     MPI_Offset  getsize; /* amount of reads  committed so far in bytes */
     MPI_Offset  putsize; /* amount of writes committed so far in bytes */
 };

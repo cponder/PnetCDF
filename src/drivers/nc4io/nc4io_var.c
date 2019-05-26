@@ -80,6 +80,10 @@ nc4io_def_var(void       *ncdp,
         if (err != NC_NOERR) DEBUG_RETURN_ERROR(err);
     }
 
+    if (ndims > nc4p->maxndim){
+        nc4p->maxndim = ndims;
+    }
+
     return NC_NOERR;
 }
 
@@ -147,11 +151,11 @@ nc4io_rename_var(void       *ncdp,
 }
 
 /*
-nc4io_get_var is implemented iin ncmpio_get_put.m4
+nc4io_get_var is implemented in ncmpio_get_put.m4
 */
 
 /*
-nc4io_put_var is implemented iin ncmpio_get_put.m4
+nc4io_put_var is implemented in ncmpio_get_put.m4
 */
 
 int
@@ -167,7 +171,22 @@ nc4io_iget_var(void             *ncdp,
                int              *reqid,
                int               reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    err = nc4io_init_req(nc4p, &req, varid, start, count, stride, imap, buf, buftype, 0);
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->getlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2;
+    }
+
+    return NC_NOERR;
 }
 
 int
@@ -183,20 +202,35 @@ nc4io_iput_var(void             *ncdp,
                int              *reqid,
                int               reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    err = nc4io_init_req(nc4p, &req, varid, start, count, stride, imap, buf, buftype, 0);
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->putlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2 + 1;
+    }
+
+    return NC_NOERR;
 }
 
 int
 nc4io_buffer_attach(void       *ncdp,
                     MPI_Offset  bufsize)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    return NC_NOERR;
 }
 
 int
 nc4io_buffer_detach(void *ncdp)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    return NC_NOERR;
 }
 
 int
@@ -212,7 +246,22 @@ nc4io_bput_var(void             *ncdp,
                int              *reqid,
                int               reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    err = nc4io_init_req(nc4p, &req, varid, start, count, stride, imap, buf, buftype, 1);
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->putlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2 + 1;
+    }
+
+    return NC_NOERR;
 }
 
 int
@@ -353,7 +402,27 @@ nc4io_iget_varn(void               *ncdp,
                 int                *reqid,
                 int                 reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    if (num > 1){
+        err = nc4io_init_varn_req(nc4p, &req, varid, num, starts, counts, buf, buftype, 0);
+    }
+    else{
+        err = nc4io_init_req(nc4p, &req, varid, starts[0], counts[0], NULL, NULL, buf, buftype, 0);
+    }
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->getlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2;
+    }
+
+    return NC_NOERR;
 }
 
 int
@@ -368,7 +437,27 @@ nc4io_iput_varn(void               *ncdp,
                 int                *reqid,
                 int                 reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+    
+    if (num > 1){
+        err = nc4io_init_varn_req(nc4p, &req, varid, num, starts, counts, buf, buftype, 0);
+    }
+    else{
+        err = nc4io_init_req(nc4p, &req, varid, starts[0], counts[0], NULL, NULL, buf, buftype, 0);
+    }
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->putlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2 + 1;
+    }
+
+    return NC_NOERR;
 }
 
 int
@@ -383,7 +472,27 @@ nc4io_bput_varn(void               *ncdp,
                 int                *reqid,
                 int                 reqMode)
 {
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err;
+    int req_id;
+    NC_nc4_req req;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+    
+    if (num > 1){
+        err = nc4io_init_varn_req(nc4p, &req, varid, num, starts, counts, buf, buftype, 1);
+    }
+    else{
+        err = nc4io_init_req(nc4p, &req, varid, starts[0], counts[0], NULL, NULL, buf, buftype, 1);
+    }
+
+    // Add to req list
+    nc4io_req_list_add(&(nc4p->putlist), &req_id);
+    nc4p->putlist.reqs[req_id] = req;
+    
+    if (reqid != NULL){
+        *reqid = req_id * 2 + 1;
+    }
+
+    return NC_NOERR;
 }
 
 int

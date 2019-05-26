@@ -29,6 +29,7 @@ NCMPIDIFF = $(top_builddir)/src/utils/ncmpidiff/ncmpidiff
 
 TESTPROGRAMS = simple_xy \
                put_get_all_kinds \
+               iput_get_all_kinds \
                interoperability_rd \
                interoperability_wr \
                noclobber \

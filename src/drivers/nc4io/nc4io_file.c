@@ -98,10 +98,17 @@ nc4io_create(MPI_Comm     comm,
     nc4p->ncid = ncidtmp;
     nc4p->putsize = 0;
     nc4p->getsize = 0;
+    nc4p->maxndim = 0;
     if (info == MPI_INFO_NULL)
         nc4p->mpiinfo = MPI_INFO_NULL;
     else
         MPI_Info_dup(info, &nc4p->mpiinfo);
+
+    /* Initialize nonblocking list */
+    err = nc4io_req_list_init(&(nc4p->getlist));
+    if (err != NC_NOERR) return err;
+    err = nc4io_req_list_init(&(nc4p->putlist));
+    if (err != NC_NOERR) return err;
 
     *ncpp = nc4p;
 
@@ -152,12 +159,19 @@ nc4io_open(MPI_Comm     comm,
     nc4p->ncid = ncidtmp;
     nc4p->putsize = 0;
     nc4p->getsize = 0;
+    nc4p->maxndim = 0;
     if (info == MPI_INFO_NULL)
         nc4p->mpiinfo = MPI_INFO_NULL;
     else
         MPI_Info_dup(info, &nc4p->mpiinfo);
 
     if (!fIsSet(omode, NC_WRITE)) fSet(nc4p->flag, NC_MODE_RDONLY);
+
+    /* Initialize nonblocking list */
+    err = nc4io_req_list_init(&(nc4p->getlist));
+    if (err != NC_NOERR) return err;
+    err = nc4io_req_list_init(&(nc4p->putlist));
+    if (err != NC_NOERR) return err;
 
     *ncpp = nc4p;
 
@@ -171,6 +185,9 @@ nc4io_close(void *ncdp)
     NC_nc4 *nc4p = (NC_nc4*)ncdp;
 
     if (nc4p == NULL) DEBUG_RETURN_ERROR(NC_EBADID)
+
+    nc4io_req_list_free(&(nc4p->putlist));
+    nc4io_req_list_free(&(nc4p->getlist));
 
     /* Close with netcdf */
     err = nc_close(nc4p->ncid);
@@ -539,8 +556,96 @@ nc4io_wait(void *ncdp,
            int  *statuses,
            int   reqMode)
 {
-    /* We do not support nonblocking I/O yet */
-    DEBUG_RETURN_ERROR(NC_ENOTSUPPORT);
+    int err, status = NC_NOERR;
+    int i;
+    int nput = 0, nget = 0;
+    int *putreqs = NULL, *getreqs = NULL;
+    int *putstats = NULL, *getstats = NULL;
+    NC_nc4 *nc4p = (NC_nc4*)ncdp;
+
+    if (num_reqs == NC_REQ_ALL || num_reqs == NC_PUT_REQ_ALL){
+        nput = nc4p->putlist.nused;
+        putreqs = (int*)NCI_Malloc(sizeof(int) * nput);
+        memcpy(putreqs, nc4p->putlist.ids, nput * sizeof(int));
+    }
+    if(num_reqs == NC_REQ_ALL || num_reqs == NC_GET_REQ_ALL){
+        nget = nc4p->getlist.nused;
+        getreqs = (int*)NCI_Malloc(sizeof(int) * nget);
+        memcpy(getreqs, nc4p->getlist.ids, nget * sizeof(int));
+    }
+
+    if (num_reqs > 0){
+        // Count number of get and put requests
+        for(i = 0; i < num_reqs; i++){
+            if (req_ids[i] & 1){
+                nput++;
+            }
+        }
+
+        // Allocate buffer
+        nget = num_reqs - nput;
+        putreqs = (int*)NCI_Malloc(sizeof(int) * nput);
+        getreqs = (int*)NCI_Malloc(sizeof(int) * nget);
+        
+        // Build put and get req list
+        nput = nget = 0;
+        for(i = 0; i < num_reqs; i++){
+            if (req_ids[i] & 1){
+                putreqs[nput++] = req_ids[i] >> 1;
+            }
+            else{
+                getreqs[nget++] = req_ids[i] >> 1;
+            }
+        }
+    }
+
+    if (statuses != NULL){
+        putstats = (int*)NCI_Malloc(sizeof(int) * nput);
+        getstats = (int*)NCI_Malloc(sizeof(int) * nget);
+        memset(putstats, 0, sizeof(int) * nput);
+        memset(getstats, 0, sizeof(int) * nget);
+    }
+    else{
+        putstats = NULL;
+        getstats = NULL;
+    }
+
+    if (nput > 0){
+        nc4io_wait_put_reqs(nc4p, nput, putreqs, putstats);
+    }
+    
+    if (nget > 0){
+        nc4io_wait_get_reqs(nc4p, nget, getreqs, getstats);
+    }
+
+    // Assign stats
+    if (statuses != NULL){
+        nput = nget = 0;
+        for(i = 0; i < num_reqs; i++){
+            if (req_ids[i] & 1){
+                statuses[i] = putstats[nput++];
+            }
+            else{
+                statuses[i] = getstats[nget++];
+            }
+        }
+
+        NCI_Free(putstats);
+        NCI_Free(getstats);
+    }
+    
+    // Remove from req list
+    for(i = 0; i < nput; i++){
+        nc4io_req_list_remove(&(nc4p->putlist), putreqs[i]);
+    }
+    for(i = 0; i < nget; i++){
+        nc4io_req_list_remove(&(nc4p->getlist), getreqs[i]);
+    }
+
+    NCI_Free(putreqs);
+    NCI_Free(getreqs);
+        
+    return NC_NOERR;
 }
 
 int
