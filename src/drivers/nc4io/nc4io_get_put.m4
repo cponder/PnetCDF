@@ -57,7 +57,7 @@ foreach(`dt', (`(`MPI_CHAR', `text', `char')', dnl
                `(`MPI_UNSIGNED_LONG_LONG', `ulonglong', `unsigned long long')', dnl
                ), `GETVARTYPE($1, translit(dt, `()'))')dnl
         else {
-            DEBUG_ASSIGN_ERROR(err, NC_ENOTSUPPORT);
+            DEBUG_ASSIGN_ERROR(err, NC_ENOTSUPPORT)
             goto fn_exit;
         }
     }
@@ -80,7 +80,7 @@ foreach(`dt', (`(`MPI_CHAR', `text', `char')', dnl
                `(`MPI_UNSIGNED_LONG_LONG', `ulonglong', `unsigned long long')', dnl
                ), `PUTVARTYPE($1, translit(dt, `()'))')dnl
         else {
-            DEBUG_ASSIGN_ERROR(err, NC_ENOTSUPPORT);
+            DEBUG_ASSIGN_ERROR(err, NC_ENOTSUPPORT)
             goto fn_exit;
         }
     }
@@ -296,7 +296,9 @@ nc4io_get_var(void             *ncdp,
 
     /* Inq variable dim */
     err = nc_inq_varndims(nc4p->ncid, varid, &ndims);
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR){
+        DEBUG_RETURN_ERROR(err);    
+    }
 
     if (reqMode & NC_REQ_ZERO) {
         /* only collective put can arrive here.
@@ -349,7 +351,10 @@ nc4io_get_var(void             *ncdp,
 
 foreach(`api', `(var, var1, vara, vars, varm)', `GETVAR(api, upcase(api))') dnl
 
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR){
+        DEBUG_ASSIGN_ERROR(err, err);    
+        goto fn_exit;
+    }
 
     /* Count get size */
     if (!(reqMode & NC_REQ_ZERO)) {
@@ -403,7 +408,9 @@ nc4io_put_var(void             *ncdp,
 
     /* Inq variable dim */
     err = nc_inq_varndims(nc4p->ncid, varid, &ndims);
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR){
+        DEBUG_RETURN_ERROR(err);    
+    }
 
     if (reqMode & NC_REQ_ZERO) {
         /* only collective put can arrive here.
@@ -456,7 +463,10 @@ nc4io_put_var(void             *ncdp,
 
 foreach(`api', `(var, var1, vara, vars, varm)', `PUTVAR(api, upcase(api))') dnl
 
-    if (err != NC_NOERR) goto fn_exit;
+    if (err != NC_NOERR){
+        DEBUG_ASSIGN_ERROR(err, err);    
+        goto fn_exit;
+    }
 
     /* Count put size */
     if (!(reqMode & NC_REQ_ZERO)) {
