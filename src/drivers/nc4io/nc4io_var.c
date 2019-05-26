@@ -180,7 +180,7 @@ nc4io_iget_var(void             *ncdp,
 
     // Add to req list
     nc4io_req_list_add(&(nc4p->getlist), &req_id);
-    nc4p->putlist.reqs[req_id] = req;
+    nc4p->getlist.reqs[req_id] = req;
     
     if (reqid != NULL){
         *reqid = req_id * 2;
@@ -416,7 +416,7 @@ nc4io_iget_varn(void               *ncdp,
 
     // Add to req list
     nc4io_req_list_add(&(nc4p->getlist), &req_id);
-    nc4p->putlist.reqs[req_id] = req;
+    nc4p->getlist.reqs[req_id] = req;
     
     if (reqid != NULL){
         *reqid = req_id * 2;
