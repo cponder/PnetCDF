@@ -14,7 +14,7 @@ dnl AC_REVISION([$Revision$])dnl
 
 dnl autoconf v2.69 was released in 2012-04-24
 AC_PREREQ([2.69])
-AC_INIT([PnetCDF],[1.11.1],[parallel-netcdf@mcs.anl.gov],[pnetcdf],[https://parallel-netcdf.github.io])
+AC_INIT([PnetCDF],[1.11.2],[parallel-netcdf@mcs.anl.gov],[pnetcdf],[https://parallel-netcdf.github.io])
 
 dnl config.h.in will be created by autoreconf (autoheader)
 dnl call it right after AC_INIT, as suggested by autoconf
@@ -125,6 +125,7 @@ dnl AH_TEMPLATE([ENABLE_IN_PLACE_SWAP], [Define if to enable in-place byte swap]
 dnl AH_TEMPLATE([DISABLE_IN_PLACE_SWAP],[Define if to disable in-place byte swap])
 AH_TEMPLATE([ENABLE_SUBFILING],         [Define if to enable subfiling feature])
 AH_TEMPLATE([ENABLE_NETCDF4],           [Define if to enable NetCDF-4 support])
+AH_TEMPLATE([ENABLE_ADIOS],             [Define if to enable ADIOS BP read feature])
 AH_TEMPLATE([HDF5_VER_GE_1_10_4],       [Define if HDF5 version is at least 1.10.4])
 AH_TEMPLATE([NETCDF_GE_4_5_0],          [Define if NetCDF version is at least 4.5.0])
 AH_TEMPLATE([PNC_MALLOC_TRACE],         [Define if to enable malloc tracing])
@@ -143,9 +144,9 @@ AH_BOTTOM([#include <nctypes.h>
 #endif])
 
 dnl an option to use a customized rm command
+RM=rm
 AC_ARG_VAR(RM, Command for deleting files or directories. @<:@default: rm@:>@)
 if test "x${RM}" != x ; then
-   AC_MSG_CHECKING(rm )
    dnl ${RM} set by user may contain flags
    RM_CMD=`echo ${RM} | cut -d' ' -f1`
    if ! test -f ${RM_CMD} ; then
@@ -154,10 +155,17 @@ if test "x${RM}" != x ; then
          RM=rm
       fi
    fi
-   AC_MSG_RESULT(using $RM)
-else
-   RM=rm
 fi
+UD_MSG_DEBUG([RM=$RM])
+
+dnl AC_PROG_SED and AC_PROG_GREP are only available on autoconf 2.60 and later
+AC_PROG_AWK
+AC_PROG_GREP
+AC_PROG_EGREP
+
+AC_PROG_SED
+dnl check sed command option -i and set SED_I (this requires RM defined)
+UD_PROG_SED_I
 
 AC_ARG_ENABLE(echo,
    [AS_HELP_STRING([--enable-echo],
@@ -333,6 +341,15 @@ AC_CHECK_FUNC([MPI_File_open], [],
      PnetCDF requires MPI-IO support to work properly. Abort.
    -----------------------------------------------------------------------])
 ])])
+
+dnl check the base of MPICC compiler
+UD_CHECK_MPICC_BASE
+AM_CONDITIONAL(MPICC_IS_XLC,   [test "x${ac_cv_mpicc_base}" = xXLC])
+AM_CONDITIONAL(MPICC_IS_PGCC,  [test "x${ac_cv_mpicc_base}" = xPGCC])
+AM_CONDITIONAL(MPICC_IS_FCCPX, [test "x${ac_cv_mpicc_base}" = xFCCPX])
+
+dnl print out MPI version and vendor infomration
+CHECK_MPI_VERSION
 
 dnl compute canonical system types
 AC_CANONICAL_BUILD
@@ -803,12 +820,12 @@ if test "x${has_fortran}" = xyes ; then
 
    dnl Some Fortran 77 compilers, such as pgf77, do not allow "_8" modifier,
    dnl because _8 modifier is a Fortran 90 feature
-   dnl UD_CHECK_PGF77
-   dnl UD_MSG_DEBUG([ac_cv_fc_compiler_pgf77=$ac_cv_fc_compiler_pgf77])
+   dnl UD_CHECK_MPIF77_IS_PGF77
+   dnl UD_MSG_DEBUG([ac_cv_mpif77_is_PGF77=$ac_cv_mpif77_is_PGF77])
 
    dnl Check if the Fortran compiler is an NAG
-   UD_CHECK_FC_NAG
-   if test "x${ac_cv_fc_compiler_nag}" = xyes ; then
+   UD_CHECK_MPIF90_IS_NAG
+   if test "x${ac_cv_mpif90_is_NAG}" = xyes ; then
       dnl Add -mismatch if they are not set by users
       if ! echo "${FFLAGS}" | ${EGREP} -q -- "-mismatch" ; then
          FFLAGS+=" -mismatch"
@@ -932,17 +949,9 @@ dnl    have_yacc_lex=no
 dnl fi
 dnl AM_CONDITIONAL(HAVE_YACC_LEX, [test x$have_yacc_lex = xyes])
 
-AC_PROG_AWK
 dnl AC_PROG_LN_S
 dnl AC_PROG_MAKE_SET
 dnl AC_SUBST(SET_MAKE)
-AC_PROG_EGREP
-
-dnl AC_PROG_SED and AC_PROG_GREP are only available on autoconf 2.60 and later
-AC_PROG_SED
-dnl check sed command option -i and set SED_I
-UD_PROG_SED_I
-AC_PROG_GREP
 
 dnl YACC and LEX are required to build PnetCDF utility tool ncmpigen
 dnl if configure finds bison then YACC is set to bison -y, so we need to clean
@@ -1452,64 +1461,88 @@ AM_CONDITIONAL(ENABLE_NETCDF4, [test x$enable_netcdf4 = xyes])
 
 if test "x$enable_netcdf4" = "xyes" ; then
    NETCDF4_INSTALL=""
+   netcdf_includedir=""
+   netcdf_libdir=""
    AC_ARG_WITH(netcdf4,
-       [AS_HELP_STRING([--with-netcdf4=/path/to/implementation],
-                       [installation prefix for NetCDF-4 implementation])],
+       [AS_HELP_STRING([--with-netcdf4=/path/to/netcdf4],
+                       [installation path(s) of NetCDF-4 libraries:
+        --with-netcdf4=INC,LIB for include directory and library directory separated by a comma
+        --with-netcdf4=DIR for directory containing include/ and lib/ subdirectories
+       ])], [
        if test "x${withval}" = x; then
           AC_MSG_ERROR(--with-netcdf4 is set but the value is NULL)
        else
           NETCDF4_INSTALL=${withval}
        fi
-   )
-   UD_MSG_DEBUG([NETCDF4_INSTALL=$NETCDF4_INSTALL])
+       UD_MSG_DEBUG([NETCDF4_INSTALL=$NETCDF4_INSTALL])
+
+       case $NETCDF4_INSTALL in
+         *,*)
+            netcdf_includedir="`echo $withval |cut -f1 -d,`"
+            netcdf_libdir="`echo $withval |cut -f2 -d, -s`"
+            netcdf_bindir="$netcdf_includedir/../bin"
+            ;;
+         *)
+            netcdf_includedir="$withval/include"
+            netcdf_libdir="$withval/lib"
+            netcdf_bindir="$withval/bin"
+            ;;
+       esac
+       UD_MSG_DEBUG([netcdf_includedir=$netcdf_includedir])
+       UD_MSG_DEBUG([netcdf_libdir=$netcdf_libdir])
+   ])
 
    # check availability of nc-config only under $NETCDF4_INSTALL/bin
    nc_config=
    if test "x$NETCDF4_INSTALL" != x ; then
-      AC_PATH_PROG([nc_config],[nc-config],,[$NETCDF4_INSTALL/bin])
-   fi
-   netcdf_includedir=
-   if test "x$nc_config" = x ; then
-      # nc-config may not be installed, even if NetCDF4 is installed. For
-      # example, there are only include and lib installed under NETCDF4_INSTALL
-      # on Cori @NERSC. Missing bin folder under NETCDF4_INSTALL may be due to
-      # the cross compile environment to make all executables, such as ncdump
-      # and ncgen, supposed to be under bin only available for login nodes and
-      # thus those executables may be installed in a different location. In
-      # this case, we just use and check header and library files under
-      # $NETCDF4_INSTALL.
-      UD_MSG_DEBUG([nc-config is not available under $NETCDF4_INSTALL/bin])
-      dnl AC_MSG_WARN([
-      dnl ------------------------------------------------------------
-      dnl Cannot find nc_config, a utility command to show the
-      dnl configuration of the NetCDF-4 library. It is required to
-      dnl build PnetCDF with NetCDF-4 support. Use option
-      dnl     --with-netcdf4=/path/to/implementation
-      dnl to specify the location of NetCDF-4 build. In addition,
-      dnl please make sure the MPI C compiler is compatible with the
-      dnl one used to build NetCDF-4. The NetCDF-4 library used must
-      dnl be built with parallel I/O and NETCDF-4 support. Check
-      dnl 'config.log' for more information. Stopping ...
-      dnl ------------------------------------------------------------])
-      if test "x$NETCDF4_INSTALL" != x ; then
-         netcdf_includedir="$NETCDF4_INSTALL/include"
-         UD_MSG_DEBUG([netcdf_includedir=$netcdf_includedir])
-      fi
-   else
-      UD_MSG_DEBUG([nc_config=$nc_config])
+      AC_PATH_PROG([nc_config],[nc-config],,[$netcdf_bindir])
 
-      dnl Check if NetCDF is built with HDF5 enabled
-      netcdf_has_hdf5=`$nc_config --has-hdf5`
-      if test "x$netcdf_has_hdf5" = xno ; then
-         AC_MSG_ERROR([NetCDF-4 library is not built with HDF5 enabled])
-      fi
-      unset netcdf_has_hdf5
+      if test "x$nc_config" = x ; then
+         # nc-config may not be installed, even if NetCDF4 is installed. For
+         # example, there are only include and lib installed under
+         # NETCDF4_INSTALL on Cori @NERSC. Missing bin folder under
+         # NETCDF4_INSTALL may be due to the cross compile environment to make
+         # all executables, such as ncdump and ncgen, supposed to be under bin
+         # only available for login nodes and thus those executables may be
+         # installed in a different location. In this case, we just use and
+         # check header and library files under $NETCDF4_INSTALL.
 
-      dnl Get installation directory path of netcdf header files
-      dnl Add the path to CPPFLAGS, as it is needed to compile PnetCDF codes
-      netcdf_includedir=`$nc_config --includedir`
-      UD_MSG_DEBUG([netcdf_includedir=$netcdf_includedir])
+         UD_MSG_DEBUG([nc-config is not available under $NETCDF4_INSTALL/bin])
+         dnl AC_MSG_WARN([
+         dnl ------------------------------------------------------------
+         dnl Cannot find nc_config, a utility command to show the
+         dnl configuration of the NetCDF-4 library. It is required to
+         dnl build PnetCDF with NetCDF-4 support. Use option
+         dnl     --with-netcdf4=/path/to/implementation
+         dnl to specify the location of NetCDF-4 build. In addition,
+         dnl please make sure the MPI C compiler is compatible with the
+         dnl one used to build NetCDF-4. The NetCDF-4 library used must
+         dnl be built with parallel I/O and NETCDF-4 support. Check
+         dnl 'config.log' for more information. Stopping ...
+         dnl ------------------------------------------------------------])
+      else
+         UD_MSG_DEBUG([nc_config=$nc_config])
+
+         dnl Check if NetCDF is built with HDF5 enabled
+         netcdf_has_hdf5=`$nc_config --has-hdf5`
+         if test "x$netcdf_has_hdf5" = xno ; then
+            AC_MSG_ERROR([
+            ------------------------------------------------------------
+            NetCDF-4 library is not built with HDF5 enabled, as indicated
+            by command '$nc_config --has-hdf5'
+            Stopping ...
+            ------------------------------------------------------------])
+         fi
+         unset netcdf_has_hdf5
+
+         dnl Get installation directory path of netcdf header files
+         dnl Add the path to CPPFLAGS, as it is needed to compile PnetCDF codes
+         dnl netcdf_includedir=`$nc_config --includedir`
+         dnl UD_MSG_DEBUG([netcdf_includedir=$netcdf_includedir])
+      fi
    fi
+
+   dnl find out how NetCDF is configured.
 
    dnl No need to add the include paths used to build NetCDF to CPPFLAGS
    dnl permanently, as it is not needed to compile PnetCDF codes
@@ -1523,7 +1556,7 @@ if test "x$enable_netcdf4" = "xyes" ; then
    if test "x${have_netcdf4}" = xno; then
       AC_MSG_ERROR([
       ------------------------------------------------------------
-      Missing NetCDF-4 header files (netcdf.h or netcdf_meta.h)
+      Missing NetCDF-4 header files 'netcdf.h' or 'netcdf_meta.h'
       required to build PnetCDF with NetCDF-4 support. Use option
           --with-netcdf4=/path/to/implementation
       to specify the location of NetCDF-4 installation. In addition,
@@ -1536,7 +1569,7 @@ if test "x$enable_netcdf4" = "xyes" ; then
    if test "x${have_netcdf4}" = xno; then
       AC_MSG_ERROR([
       ------------------------------------------------------------
-      Missing NetCDF-4 header file netcdf_par.h required by PnetCDF.
+      Missing NetCDF-4 header file 'netcdf_par.h' required by PnetCDF.
       The NetCDF-4 library must be built with parallel I/O and
       NETCDF-4 support. Check 'config.log' for more information.
       Stopping ...
@@ -1635,11 +1668,11 @@ if test "x$enable_netcdf4" = "xyes" ; then
 
    if test "x$nc_config" != x ; then
       # Get installation directory path of netcdf library files
-      if test "x$netcdf_ge_4_4_2" = xyes ; then
-         # Option --libdir is first added in NetCDF 4.4.2
-         netcdf_libdir=`$nc_config --libdir`
-         UD_MSG_DEBUG([netcdf_libdir=$netcdf_libdir])
-      fi
+      # if test "x$netcdf_ge_4_4_2" = xyes ; then
+      #    # Option --libdir is first added in NetCDF 4.4.2
+      #    netcdf_libdir=`$nc_config --libdir`
+      #    UD_MSG_DEBUG([netcdf_libdir=$netcdf_libdir])
+      # fi
 
       # Get extra libraries used by netcdf library (dependent libraries)
       netcdf_libs=`$nc_config --libs`
@@ -1647,10 +1680,10 @@ if test "x$enable_netcdf4" = "xyes" ; then
       dnl remove -lpnetcdf if it contains it
       # netcdf_libs=`echo $netcdf_libs | $SED "s/-lpnetcdf//g"`
    else
-      if test "x$NETCDF4_INSTALL" != x ; then
-         netcdf_libdir="$NETCDF4_INSTALL/lib"
-         UD_MSG_DEBUG([netcdf_libdir=$netcdf_libdir])
-      fi
+      # if test "x$NETCDF4_INSTALL" != x ; then
+      #    netcdf_libdir="$NETCDF4_INSTALL/lib"
+      #    UD_MSG_DEBUG([netcdf_libdir=$netcdf_libdir])
+      # fi
       netcdf_libs="-lnetcdf"
       UD_MSG_DEBUG([netcdf_libs=$netcdf_libs])
    fi
@@ -1662,13 +1695,7 @@ if test "x$enable_netcdf4" = "xyes" ; then
       LDFLAGS="-L$netcdf_libdir $LDFLAGS"
    fi
    LIBS="$netcdf_libs $LIBS"
-   AC_SEARCH_LIBS([nc_open], [netcdf], [nc_open_found=yes], [nc_open_found=no])
-   if test "x$nc_open_found" = xno ; then
-      if test "x$nc_config" = x ; then
-         AC_MSG_WARN([Please set HDF5 lib path and libraries in environment variables LDFLAGS and LIBS])
-      fi
-      AC_MSG_ERROR([Cannot find nc_open in NetCDF-4 library])
-   fi
+   AC_SEARCH_LIBS([nc_open], [netcdf],,[AC_MSG_ERROR([Cannot find nc_open in NetCDF-4 library])])
    LDFLAGS=$saved_LDFLAGS
    LIBS=$saved_LIBS
    # Do not add -L$netcdf_libdir to LDFLAGS and -lnetcdf to LIBS
@@ -1692,6 +1719,7 @@ if test "x$enable_netcdf4" = "xyes" ; then
 
    dnl check if HDF5 version 1.10.4 or later is used to build NetCDF
    if test "x$nc_config" != x ; then
+      # cflags should contain HDF5 include path
       netcdf_cflags=`$nc_config --cflags`
    fi
 
@@ -1714,44 +1742,54 @@ if test "x$enable_netcdf4" = "xyes" ; then
    # restore CPPFLAGS
    CPPFLAGS=$saved_CPPFLAGS
 
-   # get NETCDF4 include dir from nc-config and remove any duplicate
-   AC_MSG_CHECKING([NetCDF-4 include directories])
-   netcdf_incdir=
-   if test "x$nc_config" != x ; then
-      netcdf_incdir=`$nc_config --includedir`
-   else
-      if test "x$NETCDF4_INSTALL" != x ; then
-         netcdf_incdir="$NETCDF4_INSTALL/include"
-      fi
-   fi
+   # get NETCDF4 include dir from nc-config
+   # AC_MSG_CHECKING([NetCDF-4 include directories])
+   # netcdf_incdir=
+   # if test "x$nc_config" != x ; then
+   #    netcdf_incdir=`$nc_config --includedir`
+   # else
+   #    if test "x$NETCDF4_INSTALL" != x ; then
+   #       netcdf_incdir="$NETCDF4_INSTALL/include"
+   #    fi
+   # fi
+   # NETCDF4_INC=
+   # if test "x$netcdf_incdir" = x ; then
+   #    AC_MSG_RESULT([none needed])
+   # else
+   #    AC_MSG_RESULT([$netcdf_incdir])
+   #    NETCDF4_INC="-I$netcdf_incdir"
+   # fi
+   # AC_SUBST([NETCDF4_INC])
+   AC_MSG_CHECKING([NETCDF4_INC])
    NETCDF4_INC=
-   if test "x$netcdf_incdir" = x ; then
-      AC_MSG_RESULT([none needed])
-   else
-      AC_MSG_RESULT([$netcdf_incdir])
-      NETCDF4_INC="-I$netcdf_incdir"
+   if test "x$netcdf_includedir" != x ; then
+      NETCDF4_INC="-I$netcdf_includedir"
    fi
+   AC_MSG_RESULT([$NETCDF4_INC])
    AC_SUBST([NETCDF4_INC])
 
+   AC_MSG_CHECKING([NETCDF4_LDFLAGS])
    if test "x$netcdf_libdir" != x ; then
       NETCDF4_LDFLAGS="-L$netcdf_libdir"
    fi
+   UD_MSG_DEBUG(NETCDF4_LDFLAGS=$NETCDF4_LDFLAGS)
    # remove all -l options from netcdf_libs that should leave -L only
    netcdf4_L=`echo $netcdf_libs | ${SED} 's/-l[[^ ]]*//g'`
    if test "x$netcdf4_L" = x ; then
       netcdf4_L=$NETCDF4_LDFLAGS
-   else
+   elif test "x$NETCDF4_LDFLAGS" != x ; then
       netcdf4_L="$NETCDF4_LDFLAGS $netcdf4_L"
    fi
    # remove space between -L and path
    netcdf4_L=`echo $netcdf4_L | ${SED} 's/-L[[ ]]*/-L/g'`
    UD_MSG_DEBUG(netcdf4_L=$netcdf4_L)
 
-   AC_MSG_CHECKING([NetCDF-4 LDFLAGS])
-   # remove any duplicate in netcdf4_L
-   NETCDF4_LDFLAGS=`echo $netcdf4_L | ${AWK} -v RS=' ' '{if (!seen[[$0]]++){printf "%s%s",sep,$0; sep=" "}}'`
-   AC_SUBST([NETCDF4_LDFLAGS])
+   if test "x$netcdf4_L" != x ; then
+      # remove any duplicate in netcdf4_L
+      NETCDF4_LDFLAGS=`echo $netcdf4_L | ${AWK} -v RS=' ' '{if (!seen[[$1]]++){printf "%s%s",sep,$1; sep=" "}}'`
+   fi
    AC_MSG_RESULT([$NETCDF4_LDFLAGS])
+   AC_SUBST([NETCDF4_LDFLAGS])
 
    # remove all -L options from netcdf_libs that should leave -l only
    netcdf4_l=`echo $netcdf_libs | ${SED} 's/-L[[^ ]]*//g'`
@@ -1759,7 +1797,7 @@ if test "x$enable_netcdf4" = "xyes" ; then
 
    AC_MSG_CHECKING([NetCDF-4 LIBS])
    # remove any duplicate in netcdf4_l
-   NETCDF4_LIBS=`echo $netcdf4_l | ${AWK} -v RS=' ' '{if (!seen[[$0]]++){printf "%s%s",sep,$0; sep=" "}}'`
+   NETCDF4_LIBS=`echo $netcdf4_l | ${AWK} -v RS=' ' '{if (!seen[[$1]]++){printf "%s%s",sep,$1; sep=" "}}'`
    AC_SUBST([NETCDF4_LIBS])
    AC_MSG_RESULT([$NETCDF4_LIBS])
 
@@ -1898,6 +1936,153 @@ fi
 AC_SUBST(ENABLE_BURST_BUFFER)
 AM_CONDITIONAL(ENABLE_BURST_BUFFER, [test x$enable_bbdriver = xyes])
 
+AC_ARG_ENABLE([adios],
+   [AS_HELP_STRING([--enable-adios],
+                   [Enable ADIOS BP read support. @<:@default: disabled@:>@])],
+   [enable_adios=${enableval}], [enable_adios=no]
+)
+
+ENABLE_ADIOS=0
+if test "x$enable_adios" = "xyes" ; then
+   AC_DEFINE(ENABLE_ADIOS)
+   ENABLE_ADIOS=1
+fi
+AC_SUBST(ENABLE_ADIOS)
+AM_CONDITIONAL(ENABLE_ADIOS, [test x$enable_adios = xyes])
+
+ADIOS_VER_GE_1132 = 0
+
+if test "x$enable_adios" = "xyes" ; then
+    ADIOS_INSTALL=""
+    AC_ARG_WITH(adios,
+        [AS_HELP_STRING([--with-adios=/path/to/implementation],
+                        [installation prefix for ADIOS implementation])],
+        if test "x${withval}" = xyes; then
+            AC_MSG_ERROR(--with-adios must be given a pathname)
+        else
+            ADIOS_INSTALL=${withval}
+        fi
+    )
+
+    if test "x$ADIOS_INSTALL" = x ; then
+        AC_PATH_PROG([adios_config],[adios_config],,[$PATH])
+    else
+        AC_PATH_PROG([adios_config],[adios_config],,[$ADIOS_INSTALL/bin])
+    fi
+
+    if test "x$adios_config" = x ; then
+        AC_MSG_ERROR([
+        ------------------------------------------------------------
+        Cannot find adios_config, a utility command to show the
+        configuration of the ADIOS library. It is required to
+        build PnetCDF with BP read support. Use option
+            --with-adios=/path/to/implementation
+        to specify the location of ADIOS build. In addition,
+        please make sure the MPI C compiler is compatible with the
+        one used to build ADIOS. The ADIOS library used must
+        be built with parallel I/O support. Check
+        'config.log' for more information. Stopping ...
+        ------------------------------------------------------------])
+    fi
+    UD_MSG_DEBUG([adios_config=$adios_config])
+    
+    # Get adios compile flags
+    adios_cflag=`$adios_config -c`
+    UD_MSG_DEBUG([adios_compiler_flag=$adios_cflag])
+
+    # Get adios linker flags
+    adios_ldflag=`$adios_config -l`
+    UD_MSG_DEBUG([adios_linker_flag=$adios_ldflag])
+
+    saved_CPPFLAGS=$CPPFLAGS
+    saved_LDFLAGS=$LDFLAGS
+    saved_LIBS=$LIBS
+
+    CPPFLAGS="$adios_cflag $CPPFLAGS"
+    LIBS="$adios_ldflag $LIBS"
+ 
+    have_adios=no
+    AC_MSG_CHECKING(ADIOS library)
+    AC_SEARCH_LIBS([adios_read_open_file], [adiosread], [have_adios=yes], [have_adios=no])
+    if test "x${have_adios}" = xyes; then
+        AC_SEARCH_LIBS([adios_posix_open_read_internal], [adios], [have_adios=yes], [have_adios=no])
+        if test "x${have_adios}" = xyes; then
+            AC_CHECK_HEADERS([adios_read.h], [], [have_adios=no])
+        fi
+    fi
+
+    if test "x${have_adios}" = xno; then
+        have_adios2=no
+        AC_MSG_CHECKING(ADIOS2 library)
+        AC_CHECK_HEADERS([adios2_c.h], [have_adios2=yes], [have_adios2=no])
+        if test "x${have_adios2}" = xno; then
+            AC_MSG_ERROR([
+            ------------------------------------------------------------
+            The ADIOS library and header file are required to build
+            PnetCDF with ADIOS BP read support. Use option
+                --with-adios=/path/to/implementation
+            to specify the location of ADIOS build. In addition,
+            please make sure the MPI C compiler is compatible with the
+            one used to build ADIOS.
+            Stopping ...
+            Check 'config.log' for more information.
+            ------------------------------------------------------------])
+        else
+            AC_MSG_ERROR([
+            ------------------------------------------------------------
+            PnetCDF currently only supports ADIOS 1.x.
+            ADIOS 1.x can be downloaded at:
+            https://github.com/ornladios/ADIOS
+            We will support ADIOS 2.x in future releases.
+            ------------------------------------------------------------])
+        fi
+    else
+        LIBS+=" -ladiosread -ladios"
+    fi
+
+    dnl Check if ADIOS version is 1.12.0 or later
+    AC_MSG_CHECKING([Check if ADIOS version is 1.12.0 or later])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <adios_version.h>]], [[
+#if (ADIOS_VERSION_MAJOR*1000000 + ADIOS_VERSION_MINOR*1000 + ADIOS_VERSION_PATCH < 1012000)
+      choke me
+#endif
+    ]])], [adios_ge_1_12_0=yes], [adios_ge_1_12_0=no])
+    AC_MSG_RESULT([$adios_ge_1_12_0])
+
+    if test "x${adios_ge_1_12_0}" = xno; then
+        AC_MSG_ERROR([
+        ------------------------------------------------------------
+        ADIOS version 1.12.0 or later is required to build
+        PnetCDF with ADIOS BP read support. 
+        ------------------------------------------------------------])
+    fi
+
+    dnl Check if ADIOS version is 1.13.2 or later
+    AC_MSG_CHECKING([Check if ADIOS version is 1.13.2 or later])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <adios_version.h>]], [[
+#if (ADIOS_VERSION_MAJOR*1000000 + ADIOS_VERSION_MINOR*1000 + ADIOS_VERSION_PATCH < 1013002)
+      choke me
+#endif
+    ]])], [adios_ge_1_13_2=yes], [adios_ge_1_13_2=no])
+    AC_MSG_RESULT([$adios_ge_1_13_2])
+
+    if test "x${adios_ge_1_13_2}" = xyes; then
+      ADIOS_VER_GE_1132 = 1
+    fi
+    
+    CPPFLAGS=$saved_CPPFLAGS
+    LDFLAGS=$saved_LDFLAGS
+    LIBS=$saved_LIBS
+
+    AC_SUBST([ADIOS_INC], ["$adios_cflag"])
+    AC_SUBST([ADIOS_LDFLAGS], ["$adios_ldflag"])
+    AC_SUBST([ADIOS_LIBS], [""])
+    AC_SUBST([ADIOS_PACKAGE], [adios adiosread])
+fi
+
+AC_SUBST(ADIOS_VER_GE_1132)
+AM_CONDITIONAL(ADIOS_VER_GE_1132, [test x"$ADIOS_VER_GE_1132" = x1])
+
 AC_ARG_ENABLE([profiling],
    [AS_HELP_STRING([--enable-profiling],
                    [Enable time and memory profiling. @<:@default: disabled@:>@])],
@@ -1976,7 +2161,7 @@ dnl Update the version information only immediately before a public release.
 dnl PnetCDF starts with 1:0:0 (shared library is first supported in 1.9.0)
 dnl because some package distributors, such as Debian, may have already built
 dnl PnetCDF with shared libraries.
-ABIVERSION="3:1:0"
+ABIVERSION="3:2:0"
 AC_SUBST(ABIVERSION)
 if test "$enable_versioning" = "yes" ; then
    ABIVERSIONFLAGS="-version-info \$(ABIVERSION)"
@@ -1997,6 +2182,7 @@ AC_CONFIG_FILES(Makefile \
                 src/drivers/include/Makefile \
                 src/drivers/ncmpio/Makefile \
                 src/drivers/nc4io/Makefile \
+                src/drivers/ncadios/Makefile \
                 src/drivers/ncbbio/Makefile \
                 src/drivers/ncfoo/Makefile \
                 src/binding/Makefile \
@@ -2019,6 +2205,7 @@ AC_CONFIG_FILES(Makefile \
                 src/packaging/Makefile \
                 src/packaging/pnetcdf.pc \
                 examples/Makefile \
+                examples/adios/Makefile \
                 examples/C/Makefile \
                 examples/tutorial/Makefile \
                 examples/CXX/Makefile \
@@ -2038,6 +2225,7 @@ AC_CONFIG_FILES(Makefile \
                 test/nc_test/Makefile \
                 test/cdf_format/Makefile \
                 test/nc4/Makefile \
+                test/adios/Makefile \
                 test/header/Makefile \
                 test/testcases/Makefile \
                 test/nonblocking/Makefile \
@@ -2079,6 +2267,10 @@ if test "x${enable_netcdf4}" = xyes; then
    echo "\
               NetCDF-4 support                            - enabled"
 fi
+if test "x${enable_adios}" = xyes; then 
+   echo "\ 
+              ADIOS BP read support                       - enabled" 
+fi 
 if test "x${enable_bbdriver}" = xyes ; then
    echo "\
               Burst buffering                             - enabled"
@@ -2180,6 +2372,14 @@ if test "x${enable_netcdf4}" = xyes; then
               NETCDF4_LDFLAGS = ${NETCDF4_LDFLAGS}
               NETCDF4_LIBS    = ${NETCDF4_LIBS}"
 fi
+if test "x${enable_adios}" = xyes; then 
+   echo "\
+
+   ADIOS library:
+              ADIOS_INC     = ${ADIOS_INC}
+              ADIOS_LDFLAGS = ${ADIOS_LDFLAGS}
+              ADIOS_LIBS    = ${ADIOS_LIBS}"
+fi 
 echo "\
 
    Now run 'make' to build the library and utility tools.
