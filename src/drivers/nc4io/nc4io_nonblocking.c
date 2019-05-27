@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <nc4io_driver.h>
+#include <nc4io_internal.h>
 
 #define PUT_ARRAY_SIZE 128 /* Size of initial put list */
 #define SIZE_MULTIPLIER 2    /* When metadata buffer is full, we'll NCI_Reallocate it to META_BUFFER_MULTIPLIER times the original size*/

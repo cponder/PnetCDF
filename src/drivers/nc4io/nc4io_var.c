@@ -58,6 +58,7 @@
 #include <pnc_debug.h>
 #include <common.h>
 #include <nc4io_driver.h>
+#include <nc4io_internal.h>
 
 int
 nc4io_def_var(void       *ncdp,
@@ -73,6 +74,12 @@ nc4io_def_var(void       *ncdp,
     /* Call nc_def_var */
     err = nc_def_var(nc4p->ncid, name, xtype, ndims, dimids, varidp);
     if (err != NC_NOERR) DEBUG_RETURN_ERROR(err);
+
+    /* Set comrpession */
+    if (nc4p->deflatlvl > 0){
+        err = nc_def_var_deflate(nc4p->ncid, *varidp, NC_SHUFFLE, 1, nc4p->deflatlvl);
+        if (err != NC_NOERR) DEBUG_RETURN_ERROR(err);
+    }
 
     /* Default mode in NetCDF is indep, set to coll if in coll mode */
     if (!(nc4p->flag & NC_MODE_INDEP)){

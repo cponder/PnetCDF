@@ -27,7 +27,7 @@
 #include <pnc_debug.h>
 #include <common.h>
 #include <nc4io_driver.h>
-
+#include <nc4io_internal.h>
 
 /* Out drive currently can handle only one variable at a time
  * We pack all request as a large varn request

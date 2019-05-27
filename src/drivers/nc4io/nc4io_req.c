@@ -27,6 +27,7 @@
 #include <pnc_debug.h>
 #include <common.h>
 #include <nc4io_driver.h>
+#include <nc4io_internal.h>
 
 int nc4io_init_req( NC_nc4 *nc4p,
                     NC_nc4_req *req,

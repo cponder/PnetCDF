@@ -51,6 +51,7 @@ struct NC_nc4 {
     MPI_Info    mpiinfo; /* MPI hints */
     int         ncid;    /* NetCDF file ID */
     int         maxndim;
+    int         deflatlvl;
     NC_nc4_req_list     putlist;
     NC_nc4_req_list     getlist;
     MPI_Offset  getsize; /* amount of reads  committed so far in bytes */

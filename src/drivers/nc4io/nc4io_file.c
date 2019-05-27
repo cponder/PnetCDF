@@ -48,6 +48,7 @@
 #include <pnc_debug.h>
 #include <common.h>
 #include <nc4io_driver.h>
+#include <nc4io_internal.h>
 
 int
 nc4io_create(MPI_Comm     comm,
@@ -59,6 +60,8 @@ nc4io_create(MPI_Comm     comm,
 {
     char *filename;
     int err, ncidtmp;
+    int flag;
+    char value[MPI_MAX_INFO_VAL];
     NC_nc4 *nc4p;
 
     /* remove the file system type prefix name if there is any.
@@ -104,6 +107,13 @@ nc4io_create(MPI_Comm     comm,
     else
         MPI_Info_dup(info, &nc4p->mpiinfo);
 
+    /* Compression hints */
+    nc4p->deflatlvl = 0;  
+    MPI_Info_get(info, "nc_nc4_deflat", MPI_MAX_INFO_VAL - 1, value, &flag);
+    if (flag) {
+        nc4p->deflatlvl = atoi(value);  
+    }
+
     /* Initialize nonblocking list */
     err = nc4io_req_list_init(&(nc4p->getlist));
     if (err != NC_NOERR) return err;
@@ -125,6 +135,8 @@ nc4io_open(MPI_Comm     comm,
 {
     char *filename;
     int err, ncidtmp;
+    int flag;
+    char value[MPI_MAX_INFO_VAL];
     NC_nc4 *nc4p;
 
     /* remove the file system type prefix name if there is any.
@@ -166,6 +178,13 @@ nc4io_open(MPI_Comm     comm,
         MPI_Info_dup(info, &nc4p->mpiinfo);
 
     if (!fIsSet(omode, NC_WRITE)) fSet(nc4p->flag, NC_MODE_RDONLY);
+
+    /* Compression hints */
+    nc4p->deflatlvl = 0;  
+    MPI_Info_get(info, "nc_nc4_deflat", MPI_MAX_INFO_VAL - 1, value, &flag);
+    if (flag) {
+        nc4p->deflatlvl = atoi(value);  
+    }
 
     /* Initialize nonblocking list */
     err = nc4io_req_list_init(&(nc4p->getlist));
