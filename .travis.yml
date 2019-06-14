@@ -19,6 +19,7 @@ addons:
     branch_pattern: master
 
 before_install:
+  - sudo apt-get install -y openssl
   - echo -n | openssl s_client -connect https://scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
   - test -n $CC && unset CC
   # apt-package-whitelist can be found in
@@ -27,12 +28,15 @@ before_install:
   # - sudo apt-get update -qq
   - sudo apt-get install -y gfortran
   - sudo apt-get install -y mpich
-  - sudo apt-get install autoconf
-  - sudo apt-get install automake
-  - sudo apt-get install libtool
+  - sudo apt-get install -y autoconf
+  - sudo apt-get install -y automake
+#   - sudo apt-get install -y libtool
+  - sudo apt-get install -y libtool-bin
   - autoconf --version
   - automake --version
   - libtool --version
+  - sudo apt-get install -y libmpich-dev
+  - mpichversion
   - autoreconf -i
   - ./configure --enable-profiling --enable-subfiling --enable-thread-safe --enable-burst_buffering --enable-shared --enable-debug pnc_ac_debug=yes 
   - cat config.log
